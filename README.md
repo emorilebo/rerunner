@@ -363,6 +363,7 @@ Rerunner automatically redacts sensitive data before persisting cassettes:
 * **Credit Cards** (validated with Luhn checksum) $\rightarrow$ `[REDACTED_CREDIT_CARD]`
 * **JSON Structure Preservation**: Numeric fields (like `"created": 1730000000`) remain valid numbers.
 * **Streamed Responses**: SSE chunks are sanitized together, so a value split across two network chunks is still redacted. The affected chunks are merged into the first of them and the rest are left empty, keeping chunk counts and recorded delays aligned.
+* **Colliding Keys**: when two JSON keys sanitize to the same placeholder, later ones get a `#2`, `#3` suffix so no record is dropped.
 
 ---
 

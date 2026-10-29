@@ -220,6 +220,12 @@ def sanitize_payload(
                 if isinstance(k, str)
                 else k
             )
+            # Keep every record when two keys sanitize to the same placeholder
+            if clean_k in result:
+                suffix = 2
+                while f"{clean_k}#{suffix}" in result:
+                    suffix += 1
+                clean_k = f"{clean_k}#{suffix}"
             # If the key is specifically version/semver, do not redact the value as an IP
             if (
                 isinstance(k, str)

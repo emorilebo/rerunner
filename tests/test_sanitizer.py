@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import re
 from rerunner.sanitizer import (
+    sanitize_body,
     sanitize_chunks,
     sanitize_headers,
     sanitize_payload,
@@ -140,3 +142,36 @@ def test_sanitize_chunks_applies_custom_patterns_across_boundaries() -> None:
     custom = [(re.compile(r"INTERNAL-[0-9]{4}"), "[REDACTED_INTERNAL_ID]")]
     cleaned = sanitize_chunks(["ticket INTERNAL-98", "76 open"], custom_patterns=custom)
     assert cleaned == ["ticket [REDACTED_INTERNAL_ID] open", ""]
+
+
+def test_sanitize_payload_keeps_records_when_keys_collide() -> None:
+    payload = {
+        "ops@acme.org": {"id": 1},
+        "sales@acme.org": {"id": 2},
+        "support@acme.org": 3,
+        "status": "open",
+    }
+    assert sanitize_payload(payload) == {
+        "[REDACTED_EMAIL]": {"id": 1},
+        "[REDACTED_EMAIL]#2": {"id": 2},
+        "[REDACTED_EMAIL]#3": 3,
+        "status": "open",
+    }
+
+
+def test_sanitize_payload_collision_suffix_skips_taken_keys() -> None:
+    payload = {"[REDACTED_EMAIL]#2": "literal", "ops@acme.org": 1, "sales@acme.org": 2}
+    assert sanitize_payload(payload) == {
+        "[REDACTED_EMAIL]#2": "literal",
+        "[REDACTED_EMAIL]": 1,
+        "[REDACTED_EMAIL]#3": 2,
+    }
+
+
+def test_sanitize_body_keeps_nested_records_when_keys_collide() -> None:
+    body = json.dumps({"users": {"ops@acme.org": {"id": 1}, "sales@acme.org": {"id": 2}}})
+    cleaned = sanitize_body(body)
+    assert "acme.org" not in cleaned
+    assert json.loads(cleaned) == {
+        "users": {"[REDACTED_EMAIL]": {"id": 1}, "[REDACTED_EMAIL]#2": {"id": 2}}
+    }
