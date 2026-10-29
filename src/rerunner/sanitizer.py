@@ -262,6 +262,45 @@ def sanitize_body(
     return sanitize_string(body, custom_patterns=custom_patterns)
 
 
+def sanitize_chunks(
+    chunks: list[str],
+    custom_patterns: list[tuple[re.Pattern[str], str]] | None = None,
+) -> list[str]:
+    """Sanitize streamed chunks so a value split across chunk boundaries is still redacted.
+
+    Each chunk is sanitized on its own first, which keeps chunk boundaries intact whenever
+    that already matches sanitizing the joined text. If it does not, a sensitive value
+    straddled a boundary: the affected run of chunks is replaced by its jointly sanitized
+    text in the first position and empty strings in the rest, so the chunk count and the
+    recorded chunk delays stay aligned.
+    """
+    cleaned = [sanitize_string(chunk, custom_patterns=custom_patterns) for chunk in chunks]
+    joined = sanitize_string("".join(chunks), custom_patterns=custom_patterns)
+    if "".join(cleaned) == joined:
+        return cleaned
+
+    head = 0
+    start = 0
+    for chunk in cleaned:
+        if not joined.startswith(chunk, start):
+            break
+        start += len(chunk)
+        head += 1
+
+    tail = 0
+    end = len(joined)
+    for chunk in reversed(cleaned[head + 1 :]):
+        if not joined.endswith(chunk, start, end):
+            break
+        end -= len(chunk)
+        tail += 1
+
+    merged = len(cleaned) - head - tail
+    return (
+        cleaned[:head] + [joined[start:end]] + [""] * (merged - 1) + cleaned[len(cleaned) - tail :]
+    )
+
+
 def find_sensitive_leaks(
     data: Any,
     custom_patterns: list[tuple[re.Pattern[str], str]] | None = None,

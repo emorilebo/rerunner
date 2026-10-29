@@ -362,6 +362,7 @@ Rerunner automatically redacts sensitive data before persisting cassettes:
 * **Authorization Headers** (`Bearer ...`) $\rightarrow$ `Bearer [REDACTED_TOKEN]`
 * **Credit Cards** (validated with Luhn checksum) $\rightarrow$ `[REDACTED_CREDIT_CARD]`
 * **JSON Structure Preservation**: Numeric fields (like `"created": 1730000000`) remain valid numbers.
+* **Streamed Responses**: SSE chunks are sanitized together, so a value split across two network chunks is still redacted. The affected chunks are merged into the first of them and the rest are left empty, keeping chunk counts and recorded delays aligned.
 
 ---
 

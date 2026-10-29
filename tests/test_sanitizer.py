@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from rerunner.sanitizer import (
+    sanitize_chunks,
     sanitize_headers,
     sanitize_payload,
     sanitize_string,
@@ -87,3 +88,55 @@ def test_sanitize_url_sensitive_query_parameters() -> None:
     assert "key=%5BREDACTED%5D" in cleaned or "key=[REDACTED]" in cleaned
     assert "client_secret=%5BREDACTED%5D" in cleaned or "client_secret=[REDACTED]" in cleaned
     assert "search=test_term" in cleaned
+
+
+SPLIT_SSE_CHUNKS = [
+    'data: {"token":"mail alice.smith@exam',
+    'ple.org done"}\n\n',
+    "data: [DONE]\n\n",
+]
+
+
+def test_sanitize_chunks_redacts_values_split_across_chunks() -> None:
+    cleaned = sanitize_chunks(SPLIT_SSE_CHUNKS)
+    assert cleaned == [
+        'data: {"token":"mail [REDACTED_EMAIL] done"}\n\n',
+        "",
+        "data: [DONE]\n\n",
+    ]
+    assert "".join(cleaned) == sanitize_string("".join(SPLIT_SSE_CHUNKS))
+
+
+def test_sanitize_chunks_keeps_boundaries_when_nothing_straddles() -> None:
+    chunks = [
+        'data: {"token":"Hello"}\n\n',
+        'data: {"token":"mail alice.smith@example.org"}\n\n',
+        "data: [DONE]\n\n",
+    ]
+    assert sanitize_chunks(chunks) == [sanitize_string(chunk) for chunk in chunks]
+
+
+def test_sanitize_chunks_at_every_split_point() -> None:
+    text = (
+        'data: {"email":"alice.smith@example.org","card":"4111 1111 1111 1111",'
+        '"ip":"192.168.1.105","key":"sk-12345678901234567890123456789012"}\n\n'
+    )
+    expected = sanitize_string(text)
+    assert "alice.smith" not in expected
+
+    for index in range(1, len(text)):
+        cleaned = sanitize_chunks([text[:index], text[index:]])
+        assert len(cleaned) == 2
+        assert "".join(cleaned) == expected
+
+    for first in range(1, len(text) - 1, 5):
+        for second in range(first + 1, len(text), 7):
+            cleaned = sanitize_chunks([text[:first], text[first:second], text[second:]])
+            assert len(cleaned) == 3
+            assert "".join(cleaned) == expected
+
+
+def test_sanitize_chunks_applies_custom_patterns_across_boundaries() -> None:
+    custom = [(re.compile(r"INTERNAL-[0-9]{4}"), "[REDACTED_INTERNAL_ID]")]
+    cleaned = sanitize_chunks(["ticket INTERNAL-98", "76 open"], custom_patterns=custom)
+    assert cleaned == ["ticket [REDACTED_INTERNAL_ID] open", ""]

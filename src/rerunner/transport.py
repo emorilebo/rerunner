@@ -19,7 +19,7 @@ from rerunner.matcher import (
     normalize_headers,
 )
 from rerunner.models import CassetteEntry, RecordedRequest, RecordedResponse
-from rerunner.sanitizer import sanitize_body, sanitize_headers, sanitize_string, sanitize_url
+from rerunner.sanitizer import sanitize_body, sanitize_chunks, sanitize_headers, sanitize_url
 
 
 def _is_event_stream(headers: httpx.Headers) -> bool:
@@ -136,9 +136,9 @@ class _RecordingSyncByteStream(httpx.SyncByteStream):
         cleaned_req_body = sanitize_body(normalize_body(self.body_bytes))
         cleaned_resp_body = sanitize_body(response_bytes.decode("utf-8", errors="replace"))
 
-        cleaned_chunks = [
-            sanitize_string(chunk.decode("utf-8", errors="replace")) for chunk in self.chunks
-        ]
+        cleaned_chunks = sanitize_chunks(
+            [chunk.decode("utf-8", errors="replace") for chunk in self.chunks]
+        )
 
         cleaned_resp_headers = sanitize_headers(dict(self.real_response.headers))
         cleaned_resp_headers.pop("content-encoding", None)
